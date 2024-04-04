@@ -3,32 +3,44 @@ import { randomUUID } from 'node:crypto'
 import { FastifyInstance } from 'fastify'
 import { knex } from '../database'
 import { z } from 'zod'
+import { checkUser } from '../middlewares/check-user'
 
 export async function mealsRoutes(app: FastifyInstance) {
-  app.get('/', async (request, reply) => {
+  app.addHook('preHandler', checkUser)
+
+  app.get('/', async (request) => {
     const userId = request.cookies.userId
 
-    if (!userId) {
-      return reply.status(400).send({
-        error: 'Usuário não encontrado',
-        message: 'Informe o campo userId nos cookies',
+    const userMeals = await knex('meals')
+      .where({
+        user_id: userId,
       })
-    }
-
-    const userMeals = await knex('meals').select()
+      .select()
 
     return { meals: userMeals }
   })
 
-  app.post('/', async (request, reply) => {
+  app.get('/:id', async (request) => {
     const userId = request.cookies.userId
 
-    if (!userId) {
-      return reply.status(400).send({
-        error: 'Usuário não encontrado',
-        message: 'Informe o campo userId nos cookies',
+    const getMealSchema = z.object({
+      id: z.string(),
+    })
+
+    const { id } = getMealSchema.parse(request.params)
+
+    const userMeal = await knex('meals')
+      .where({
+        user_id: userId,
+        id,
       })
-    }
+      .first()
+
+    return { meal: userMeal }
+  })
+
+  app.post('/', async (request, reply) => {
+    const userId = request.cookies.userId
 
     const createMealSchema = z.object({
       name: z.string().min(3, 'Nome da refeição é obrigatório'),
@@ -51,5 +63,78 @@ export async function mealsRoutes(app: FastifyInstance) {
     })
 
     return reply.status(201).send()
+  })
+
+  app.put('/:id', async (request, reply) => {
+    const userId = request.cookies.userId
+
+    const updateMealSchema = z.object({
+      id: z.string(),
+      name: z.string().min(3, 'Nome da refeição é obrigatório'),
+      description: z.string(),
+      inside_diet: z.boolean(),
+      date: z.coerce.date(),
+    })
+
+    const { id, name, description, inside_diet, date } = updateMealSchema.parse(
+      request.body,
+    )
+
+    const findMeal = await knex('meals')
+      .where({
+        user_id: userId,
+        id,
+      })
+      .first()
+
+    if (!findMeal) {
+      return reply.status(404).send({
+        error: 'Meal not found',
+        message: 'The Meal with the provided ID was not found',
+      })
+    }
+
+    await knex('meals')
+      .where({
+        user_id: userId,
+        id,
+      })
+      .update({
+        name,
+        description,
+        inside_diet,
+        date,
+      })
+  })
+
+  app.delete('/:id', async (request, reply) => {
+    const userId = request.cookies.userId
+
+    const deleteMealSchema = z.object({
+      id: z.string(),
+    })
+
+    const { id } = deleteMealSchema.parse(request.params)
+
+    const findMeal = await knex('meals')
+      .where({
+        user_id: userId,
+        id,
+      })
+      .first()
+
+    if (!findMeal) {
+      return reply.status(404).send({
+        error: 'Meal not found',
+        message: 'The Meal with the provided ID was not found',
+      })
+    }
+
+    await knex('meals')
+      .where({
+        user_id: userId,
+        id,
+      })
+      .delete()
   })
 }
