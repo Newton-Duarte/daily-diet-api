@@ -137,4 +137,31 @@ export async function mealsRoutes(app: FastifyInstance) {
       })
       .delete()
   })
+
+  app.get('/analytics', async (request) => {
+    const userId = request.cookies.userId
+
+    const meals = await knex('meals').where({
+      user_id: userId,
+    })
+
+    const insideDietMeals = meals.filter((meal) => meal.inside_diet)
+    const outsideDietMeals = meals.filter((meal) => !meal.inside_diet)
+    const bestInsideDietStreak = meals.reduce((streak, meal) => {
+      if (meal.inside_diet) {
+        streak += 1
+      } else {
+        streak = 0
+      }
+
+      return streak
+    }, 0)
+
+    return {
+      total_meals: meals.length,
+      inside_diet_total_meals: insideDietMeals.length,
+      outside_diet_total_meals: outsideDietMeals.length,
+      best_inside_diet_streak: bestInsideDietStreak,
+    }
+  })
 }
